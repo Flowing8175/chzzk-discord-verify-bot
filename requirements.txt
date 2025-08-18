@@ -1,4 +1,4 @@
-discord.py
+py-cord
 python-dotenv
 aiohttp
 python-socketio[client]
