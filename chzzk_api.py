@@ -119,7 +119,8 @@ class ChzzkAPI:
         cookies = {"NID_AUT": self.nid_aut, "NID_SES": self.nid_ses}
 
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, lambda: self.session.get(url, cookies=cookies, headers=self.headers))
+        # GET이 아닌 POST로 요청해야 할 수 있으므로, 빈 body와 함께 POST 요청을 시도합니다.
+        response = await loop.run_in_executor(None, lambda: self.session.post(url, cookies=cookies, headers=self.headers, json={}))
 
         if response.status_code == 200:
             data = response.json()
