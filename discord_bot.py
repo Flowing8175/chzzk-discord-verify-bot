@@ -156,49 +156,57 @@ class DiscordBot(discord.Client):
                 target_user_id = user_id
                 break
 
-        if target_user_id:
-            guild_id = os.getenv("DISCORD_GUILD_ID")
-            if not guild_id:
-                print("오류: DISCORD_GUILD_ID가 .env 파일에 설정되지 않았습니다.")
-                return
+        if not target_user_id:
+            return
 
-            guild = self.get_guild(int(guild_id))
-            if not guild:
-                print(f"오류: 서버를 찾을 수 없습니다 (ID: {guild_id})")
-                return
+        guild_id = os.getenv("DISCORD_GUILD_ID")
+        if not guild_id:
+            print("오류: DISCORD_GUILD_ID가 .env 파일에 설정되지 않았습니다.")
+            return
 
-            member = guild.get_member(target_user_id)
-            role = guild.get_role(self.auth_role_id)
+        guild = self.get_guild(int(guild_id))
+        if not guild:
+            print(f"오류: 서버를 찾을 수 없습니다 (ID: {guild_id})")
+            return
 
-            if member and role:
-                try:
-                    # 1. 역할 부여
-                    await member.add_roles(role)
-                    print(f"'{member.display_name}'님에게 '{role.name}' 역할을 부여했습니다.")
+        member = guild.get_member(target_user_id)
+        role = guild.get_role(self.auth_role_id)
 
-                    # 2. 닉네임 변경
-                    # 디스코드 닉네임 길이 제한은 32자
-                    base_nickname = f"{chzzk_nickname}({member.display_name})"
-                    new_nickname = (base_nickname[:31] + '…') if len(base_nickname) > 32 else base_nickname
-                    await member.edit(nick=new_nickname)
-                    print(f"'{member.display_name}'님의 닉네임을 '{new_nickname}'으로 변경했습니다.")
+        if not member or not role:
+            if not member: print(f"오류: 멤버를 찾을 수 없습니다 (ID: {target_user_id})")
+            if not role: print(f"오류: 역할을 찾을 수 없습니다 (ID: {self.auth_role_id})")
+            return
 
-                    # 3. 치지직 채팅에 인증 완료 메시지 전송
-                    await self.chzzk_api.send_chat(f"\"{chzzk_nickname}\"님 디스코드 연동 인증이 완료되었습니다!")
+        # --- 로직 수정 ---
+        # 1. 역할 부여 및 채팅 메시지 전송 (핵심 기능)
+        try:
+            await member.add_roles(role)
+            print(f"'{member.display_name}'님에게 '{role.name}' 역할을 부여했습니다.")
 
-                    # 4. 인증 과정 완료 처리 (verifying_users에서 삭제)
-                    del self.verifying_users[target_user_id]
-                    print(f"사용자 {member.display_name}의 인증 절차를 완료했습니다.")
+            await self.chzzk_api.send_chat(f"\"{chzzk_nickname}\"님 디스코드 연동 인증이 완료되었습니다!")
+        except discord.Forbidden:
+            print(f"오류: '{role.name}' 역할 부여에 실패했습니다. 봇의 권한을 확인해주세요.")
+            # 역할 부여 실패 시, 닉네임 변경 등 후속 조치 없이 종료
+            return
+        except Exception as e:
+            print(f"역할 부여 또는 채팅 전송 중 오류 발생: {e}")
+            return
 
-                except discord.Forbidden:
-                    print(f"오류: 역할 부여 또는 닉네임 변경에 필요한 권한이 없습니다. (대상: {member.display_name})")
-                except Exception as e:
-                    print(f"인증 처리 중 오류 발생: {e}")
-            else:
-                if not member:
-                    print(f"오류: 멤버를 찾을 수 없습니다 (ID: {target_user_id})")
-                if not role:
-                    print(f"오류: 역할을 찾을 수 없습니다 (ID: {self.auth_role_id})")
+        # 2. 닉네임 변경 (부가 기능, 실패해도 전체 인증에 영향 X)
+        try:
+            base_nickname = f"{chzzk_nickname}({member.display_name})"
+            new_nickname = (base_nickname[:31] + '…') if len(base_nickname) > 32 else base_nickname
+            await member.edit(nick=new_nickname)
+            print(f"'{member.display_name}'님의 닉네임을 '{new_nickname}'으로 변경했습니다.")
+        except discord.Forbidden:
+            print(f"경고: '{member.display_name}'님의 닉네임을 변경할 수 없습니다. (봇 권한 부족)")
+        except Exception as e:
+            print(f"닉네임 변경 중 오류 발생: {e}")
+
+        # 3. 인증 과정 완료 처리
+        if target_user_id in self.verifying_users:
+            del self.verifying_users[target_user_id]
+            print(f"사용자 {member.display_name}의 인증 절차를 완료했습니다.")
         # else:
             # print(f"'{auth_code}'에 해당하는 진행 중인 인증을 찾을 수 없습니다.")
 
