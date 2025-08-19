@@ -106,7 +106,7 @@ class ChzzkAPI:
             else:
                 print("쿠키 정보가 없습니다. 브라우저에서 로그인해주세요...")
                 driver.get("https://nid.naver.com/nidlogin.login")
-                WebDriverWait(driver, 120).until(EC.not_(EC.url_contains("nid.naver.com/nidlogin.login")))
+                WebDriverWait(driver, 120).until(lambda d: "nid.naver.com/nidlogin.login" not in d.current_url)
                 print("로그인 성공. 쿠키를 저장합니다.")
                 for cookie in driver.get_cookies():
                     if cookie['name'] == 'NID_AUT': set_key(".env", "NID_AUT", cookie['value'])
