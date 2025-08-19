@@ -195,14 +195,39 @@ class ChzzkAPI:
 
     async def send_chat(self, message):
         await self.get_access_token()
-        if not self.access_token or not self.chat_channel_id: print("액세스 토큰 또는 채팅 채널 ID가 없어 메시지를 보낼 수 없습니다."); return
-        url = "https://openapi.chzzk.naver.com/open/v1/chats/send"
-        headers = {**self.headers, "Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
-        cookies = {"NID_AUT": self.nid_aut, "NID_SES": self.nid_ses}
-        payload = {"message": message, "chatChannelId": self.chat_channel_id}
-        response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.session.post(url, headers=headers, cookies=cookies, json=payload))
-        if response.status_code == 200: print(f"치지직 채팅 전송 성공: {message}")
-        else: print(f"치지직 채팅 전송 실패: {response.status_code}, {response.text}")
+        if not self.access_token or not self.chat_channel_id:
+            print("액세스 토큰 또는 채팅 채널 ID가 없어 메시지를 보낼 수 없습니다.")
+            return
+
+        # The /v1/chats endpoint seems to be the correct one, not /v1/chats/send
+        url = "https://openapi.chzzk.naver.com/open/v1/chats"
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json"
+        }
+
+        # A more complex payload structure is required, with a stringified JSON `extras` field.
+        extras_json = json.dumps({
+            "chatType": "TEXT",
+            "emojis": "",
+            "streamingChannelId": self.channel_id
+        })
+
+        payload = {
+            "chatChannelId": self.chat_channel_id,
+            "content": message,
+            "extras": extras_json
+        }
+
+        response = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: self.session.post(url, headers=headers, json=payload)
+        )
+
+        if response.status_code == 200:
+            print(f"치지직 채팅 전송 성공: {message}")
+        else:
+            print(f"치지직 채팅 전송 실패: {response.status_code}, {response.text}")
 
     async def close(self):
         self.is_listening = False
