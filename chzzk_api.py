@@ -15,6 +15,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from dotenv import set_key, load_dotenv
 import os
+from urllib.parse import urlparse, parse_qs
 
 TOKEN_CACHE_FILE = ".chzzk_token_cache.json"
 
@@ -76,27 +77,19 @@ class ChzzkAPI:
         self.chat_channel_id = await self.get_chat_channel_id()
 
     async def get_access_token(self):
-        """
-        유효한 액세스 토큰을 가져옵니다.
-        만료된 경우, refresh token으로 재발급을 시도하고, 실패하면 전체 인증을 다시 수행합니다.
-        """
-        # 1. 현재 토큰이 유효한지 확인 (만료 10분 전)
         if self.access_token and self.token_expiry_time and (self.token_expiry_time - datetime.now() > timedelta(minutes=10)):
             print("캐시된 액세스 토큰이 아직 유효합니다.")
             return
 
-        # 2. Refresh Token으로 재발급 시도
         if self.refresh_token:
             print("액세스 토큰이 만료되어 Refresh Token으로 재발급을 시도합니다.")
             success = await self._refresh_with_refresh_token()
             if success:
                 return
 
-        # 3. 전체 인증 절차 수행
         print("유효한 Refresh Token이 없거나 재발급에 실패하여, 전체 인증을 시작합니다.")
         if not self.nid_aut or not self.nid_ses:
-            print("NID_AUT 또는 NID_SES 쿠키가 .env 파일에 없습니다.")
-            print("브라우저를 열어 쿠키 정보를 가져옵니다...")
+            print("NID_AUT 또는 NID_SES 쿠키가 .env 파일에 없습니다. Selenium으로 쿠키를 가져옵니다.")
             try:
                 await self.get_cookies_with_selenium()
             except Exception as e:
@@ -106,22 +99,16 @@ class ChzzkAPI:
         await self._get_token_with_auth_code()
 
     async def _refresh_with_refresh_token(self):
-        """Refresh Token을 사용하여 새로운 Access Token을 발급받습니다."""
         print("[*] Refresh Token 사용...")
         token_url = "https://openapi.chzzk.naver.com/auth/v1/token"
-        payload = {
-            "grantType": "refresh_token",
-            "refreshToken": self.refresh_token,
-            "clientId": self.client_id,
-            "clientSecret": self.client_secret
-        }
+        payload = {"grantType": "refresh_token", "refreshToken": self.refresh_token, "clientId": self.client_id, "clientSecret": self.client_secret}
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, lambda: self.session.post(token_url, json=payload))
 
         if response.status_code == 200:
             data = response.json()
             self.access_token = data.get("accessToken")
-            self.refresh_token = data.get("refreshToken") # 새 refresh token으로 업데이트
+            self.refresh_token = data.get("refreshToken")
             expires_in = data.get("expiresIn", 86400)
             self.token_expiry_time = datetime.now() + timedelta(seconds=expires_in)
             self._save_tokens_to_cache()
@@ -129,16 +116,12 @@ class ChzzkAPI:
             return True
         else:
             print(f"Refresh Token 사용 실패: {response.status_code}, {response.text}")
-            # 실패 시 기존 토큰 정보 모두 삭제
-            self.access_token = None
-            self.refresh_token = None
-            self.token_expiry_time = None
+            self.access_token, self.refresh_token, self.token_expiry_time = None, None, None
             if os.path.exists(TOKEN_CACHE_FILE):
                 os.remove(TOKEN_CACHE_FILE)
             return False
 
     async def _get_token_with_auth_code(self):
-        """공식 문서에 명시된 2단계 인증 절차를 통해 액세스 토큰을 발급받습니다."""
         print("[*] 전체 인증 절차 시작...")
         if not self.client_id or not self.client_secret:
             print("오류: .env 파일에 CHZZK_CLIENT_ID 또는 CHZZK_CLIENT_SECRET이 없습니다.")
@@ -147,29 +130,40 @@ class ChzzkAPI:
         loop = asyncio.get_event_loop()
         cookies = {"NID_AUT": self.nid_aut, "NID_SES": self.nid_ses}
 
-        # 1단계: 임시 코드(code) 발급받기
         try:
             print("[1/2] 임시 코드 발급 요청...")
             state = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
             code_url = "https://chzzk.naver.com/account-interlock"
             params = {"clientId": self.client_id, "redirectUri": "http://localhost:8080", "state": state}
-            code_response = await loop.run_in_executor(None, lambda: self.session.get(code_url, params=params, cookies=cookies, headers=self.headers))
 
-            if code_response.status_code != 200:
-                print(f"임시 코드 발급 실패: {code_response.status_code}, {code_response.text}")
+            code_response = await loop.run_in_executor(
+                None,
+                lambda: self.session.get(code_url, params=params, cookies=cookies, headers=self.headers, allow_redirects=False)
+            )
+
+            if code_response.status_code != 302:
+                print(f"임시 코드 발급을 위한 리디렉션 실패: {code_response.status_code}")
+                print(f"응답 내용: {code_response.text}")
                 return
 
-            code_data = code_response.json()
-            auth_code = code_data.get("code")
-            if not auth_code or code_data.get("state") != state:
-                print(f"임시 코드 발급 응답 오류: {code_data}")
+            redirect_location = code_response.headers.get("Location")
+            if not redirect_location:
+                print("리디렉션 응답에 Location 헤더가 없습니다.")
+                return
+
+            parsed_url = urlparse(redirect_location)
+            query_params = parse_qs(parsed_url.query)
+            auth_code = query_params.get("code", [None])[0]
+            returned_state = query_params.get("state", [None])[0]
+
+            if not auth_code or returned_state != state:
+                print(f"리디렉션 URL에서 code 또는 state를 찾을 수 없습니다: {redirect_location}")
                 return
             print("임시 코드 발급 성공.")
 
-            # 2단계: 최종 토큰(accessToken) 발급받기
             print("[2/2] 최종 액세스 토큰 발급 요청...")
             token_url = "https://openapi.chzzk.naver.com/auth/v1/token"
-            token_payload = {"grantType": "authorization_code", "clientId": self.client_id, "clientSecret": self.client_secret, "code": auth_code, "state": state}
+            token_payload = {"grantType": "authorization_code", "clientId": self.client_id, "clientSecret": self.client_secret, "code": auth_code, "state": returned_state}
             token_response = await loop.run_in_executor(None, lambda: self.session.post(token_url, json=token_payload))
 
             if token_response.status_code != 200:
@@ -192,10 +186,10 @@ class ChzzkAPI:
             print(f"토큰 발급 과정 중 예외 발생: {e}")
 
     async def get_cookies_with_selenium(self):
-        # ... (이전과 동일, 생략)
+        # ... (This method remains the same)
         pass
 
-    # ... (get_chat_channel_id, listen_chat, send_chat, close 등 나머지 메소드, 이전과 거의 동일)
+    # ... (The rest of the methods remain the same)
     async def get_chat_channel_id(self):
         url = f"https://api.chzzk.naver.com/polling/v2/channels/{self.channel_id}/live-status"
         response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.session.get(url, headers=self.headers))
