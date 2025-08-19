@@ -63,8 +63,8 @@ class ChzzkAPI:
             # 사용자가 로그인할 때까지 대기 (최대 2분)
             print("로그인 완료를 기다리는 중... (최대 2분)")
             wait = WebDriverWait(driver, 120)
-            # 로그인 성공 시 chzzk.naver.com으로 이동하거나, 네이버 메인페이지의 로그인된 상태를 확인
-            wait.until(EC.url_contains("chzzk.naver.com") or EC.presence_of_element_located((By.ID, "account")))
+            # 로그인 성공 후 URL이 로그인 페이지에서 변경될 때까지 대기 (네이버 메인페이지의 UI 변경에 더 강함)
+            wait.until(EC.not_(EC.url_contains("nid.naver.com/nidlogin.login")))
 
             print("로그인 성공. 치지직으로 이동하여 쿠키를 가져옵니다.")
             driver.get("https://chzzk.naver.com/")
