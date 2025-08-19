@@ -78,8 +78,9 @@ class ChzzkAPI:
         response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.session.post(token_url, json=payload))
         if response.status_code == 200:
             data = response.json()
-            self.access_token, self.refresh_token = data.get("accessToken"), data.get("refreshToken")
-            self.token_expiry_time = datetime.now() + timedelta(seconds=data.get("expiresIn", 86400))
+            content = data.get("content", {})
+            self.access_token, self.refresh_token = content.get("accessToken"), content.get("refreshToken")
+            self.token_expiry_time = datetime.now() + timedelta(seconds=content.get("expiresIn", 86400))
             self._save_tokens_to_cache()
             print("Refresh Token을 사용하여 액세스 토큰 재발급 성공.")
             return True
@@ -134,8 +135,9 @@ class ChzzkAPI:
 
             if response.status_code == 200:
                 token_data = response.json()
-                self.access_token, self.refresh_token = token_data.get("accessToken"), token_data.get("refreshToken")
-                self.token_expiry_time = datetime.now() + timedelta(seconds=token_data.get("expiresIn", 86400))
+                content = token_data.get("content", {})
+                self.access_token, self.refresh_token = content.get("accessToken"), content.get("refreshToken")
+                self.token_expiry_time = datetime.now() + timedelta(seconds=content.get("expiresIn", 86400))
                 if self.access_token: self._save_tokens_to_cache(); print("최종 액세스 토큰 발급 성공.")
                 else: print(f"액세스 토큰 발급 응답 오류: {token_data}")
             else:
