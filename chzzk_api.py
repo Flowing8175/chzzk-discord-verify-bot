@@ -186,10 +186,11 @@ class ChzzkAPI:
     async def send_chat(self, message):
         await self.get_access_token()
         if not self.access_token or not self.chat_channel_id: print("액세스 토큰 또는 채팅 채널 ID가 없어 메시지를 보낼 수 없습니다."); return
-        url = f"https://api.chzzk.naver.com/services/v2/channels/{self.channel_id}/chats"
+        url = "https://openapi.chzzk.naver.com/open/v1/chats/send"
         headers = {**self.headers, "Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
+        # Note: The new endpoint might not require cookies, but sending them is harmless.
         cookies = {"NID_AUT": self.nid_aut, "NID_SES": self.nid_ses}
-        payload = {"extras": "{}", "content": message}
+        payload = {"message": message, "chatChannelId": self.chat_channel_id} # The chatChannelId is likely needed to specify the chat room
         response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.session.post(url, headers=headers, cookies=cookies, json=payload))
         if response.status_code == 200: print(f"치지직 채팅 전송 성공: {message}")
         else: print(f"치지직 채팅 전송 실패: {response.status_code}, {response.text}")
