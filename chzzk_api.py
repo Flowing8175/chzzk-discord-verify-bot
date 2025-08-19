@@ -115,7 +115,7 @@ class ChzzkAPI:
             return
 
         print("치지직 액세스 토큰을 발급 또는 재발급합니다...")
-        url = "https://api.chzzk.naver.com/manage/v1/auth/access-token"
+        url = "https://api.chzzk.naver.com/service/v1/auth/access-token"
         cookies = {"NID_AUT": self.nid_aut, "NID_SES": self.nid_ses}
 
         loop = asyncio.get_event_loop()
