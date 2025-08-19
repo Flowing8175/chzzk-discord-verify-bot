@@ -97,7 +97,7 @@ class ChzzkAPI:
 
         driver = None
         try:
-            options = Options(); options.add_argument("--headless"); options.add_argument("--no-sandbox"); options.add_argument("--disable-dev-shm-usage")
+            options = Options(); options.add_argument("--no-sandbox"); options.add_argument("--disable-dev-shm-usage")
             service = Service()
             driver = webdriver.Chrome(service=service, options=options)
 
