@@ -60,15 +60,16 @@ class ChzzkAPI:
             return
         self.chat_channel_id = await self.get_chat_channel_id()
 
-    async def get_access_token(self):
+    async def get_access_token(self, verbose=True):
         if self.access_token and self.token_expiry_time and (self.token_expiry_time - datetime.now() > timedelta(minutes=10)):
-            print("캐시된 액세스 토큰이 아직 유효합니다.")
+            if verbose: print("캐시된 액세스 토큰이 아직 유효합니다.")
             return
         if self.refresh_token:
-            print("액세스 토큰이 만료되어 Refresh Token으로 재발급을 시도합니다.")
+            if verbose: print("액세스 토큰이 만료되어 Refresh Token으로 재발급을 시도합니다.")
             if await self._refresh_with_refresh_token():
                 return
-        print("유효한 Refresh Token이 없거나 재발급에 실패하여, 전체 인증을 시작합니다.")
+
+        if verbose: print("유효한 Refresh Token이 없거나 재발급에 실패하여, 전체 인증을 시작합니다.")
         await self._get_token_with_auth_code()
 
     async def _refresh_with_refresh_token(self):
@@ -77,8 +78,7 @@ class ChzzkAPI:
         payload = {"grantType": "refresh_token", "refreshToken": self.refresh_token, "clientId": self.client_id, "clientSecret": self.client_secret}
         response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.session.post(token_url, json=payload))
         if response.status_code == 200:
-            data = response.json()
-            content = data.get("content", {})
+            content = response.json().get("content", {})
             self.access_token, self.refresh_token = content.get("accessToken"), content.get("refreshToken")
             self.token_expiry_time = datetime.now() + timedelta(seconds=content.get("expiresIn", 86400))
             self._save_tokens_to_cache()
@@ -147,7 +147,6 @@ class ChzzkAPI:
             if driver: driver.quit()
 
     async def get_chat_channel_id(self):
-        # ... (이하 동일)
         url = f"https://api.chzzk.naver.com/polling/v2/channels/{self.channel_id}/live-status"
         response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.session.get(url, headers=self.headers))
         if response.status_code == 200 and response.json().get("code") == 200:
@@ -158,8 +157,9 @@ class ChzzkAPI:
 
     async def listen_chat(self):
         self.is_listening = True
+        first_connection = True
         while self.is_listening:
-            await self.get_access_token()
+            await self.get_access_token(verbose=first_connection)
             if not self.access_token: print("액세스 토큰이 없어 채팅 서버에 연결할 수 없습니다. 1분 후 재시도합니다."); await asyncio.sleep(60); continue
             if not self.chat_channel_id: self.chat_channel_id = await self.get_chat_channel_id();
             if not self.chat_channel_id: print("채팅 채널 ID가 없어 연결할 수 없습니다. 1분 후 재시도합니다."); await asyncio.sleep(60); continue
@@ -168,7 +168,10 @@ class ChzzkAPI:
                 async with websockets.connect(uri) as websocket:
                     self.websocket = websocket
                     await websocket.send(json.dumps({"ver": "3", "cmd": 100, "svcid": "game", "cid": self.chat_channel_id, "bdy": {"uid": None, "devType": 2001, "accTkn": self.access_token, "auth": "READ"}, "tid": 1}))
-                    print("치지직 채팅 서버에 연결되었습니다.")
+                    if first_connection:
+                        print("치지직 채팅 서버에 연결되었습니다.")
+                        first_connection = False
+
                     while self.is_listening:
                         message_json = await asyncio.wait_for(websocket.recv(), timeout=60)
                         message = json.loads(message_json)
@@ -181,16 +184,22 @@ class ChzzkAPI:
                 print("웹소켓 PING 전송...");
                 try: await self.websocket.send(json.dumps({"ver": "2", "cmd": 0}))
                 except: pass
-            except Exception as e: print(f"채팅 리스닝 중 오류: {e}. 5초 후 재연결합니다."); await asyncio.sleep(5)
+            except websockets.exceptions.ConnectionClosed as e:
+                if e.code != 1000:
+                    print(f"웹소켓 연결이 비정상적으로 종료되었습니다: {e}. 5초 후 재연결합니다.")
+                    await asyncio.sleep(5)
+                # Normal closure (code 1000) will be silent and just loop to reconnect.
+            except Exception as e:
+                print(f"채팅 리스닝 중 오류: {e}. 5초 후 재연결합니다.")
+                await asyncio.sleep(5)
 
     async def send_chat(self, message):
         await self.get_access_token()
         if not self.access_token or not self.chat_channel_id: print("액세스 토큰 또는 채팅 채널 ID가 없어 메시지를 보낼 수 없습니다."); return
         url = "https://openapi.chzzk.naver.com/open/v1/chats/send"
         headers = {**self.headers, "Authorization": f"Bearer {self.access_token}", "Content-Type": "application/json"}
-        # Note: The new endpoint might not require cookies, but sending them is harmless.
         cookies = {"NID_AUT": self.nid_aut, "NID_SES": self.nid_ses}
-        payload = {"message": message, "chatChannelId": self.chat_channel_id} # The chatChannelId is likely needed to specify the chat room
+        payload = {"message": message, "chatChannelId": self.chat_channel_id}
         response = await asyncio.get_event_loop().run_in_executor(None, lambda: self.session.post(url, headers=headers, cookies=cookies, json=payload))
         if response.status_code == 200: print(f"치지직 채팅 전송 성공: {message}")
         else: print(f"치지직 채팅 전송 실패: {response.status_code}, {response.text}")
