@@ -12,7 +12,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import set_key, load_dotenv
 import os
 
@@ -54,7 +53,8 @@ class ChzzkAPI:
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
 
-            service = Service(ChromeDriverManager().install())
+            # webdriver-manager 대신 Selenium에 내장된 Selenium Manager를 사용합니다.
+            service = Service()
             driver = webdriver.Chrome(service=service, options=options)
 
             print("네이버 로그인 페이지로 이동합니다. 2단계 인증을 포함하여 로그인을 완료해주세요.")
