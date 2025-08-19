@@ -199,22 +199,15 @@ class ChzzkAPI:
             print("액세스 토큰 또는 채팅 채널 ID가 없어 메시지를 보낼 수 없습니다.")
             return
 
-        url = "https://openapi.chzzk.naver.com/open/v1/chats"
+        url = "https://openapi.chzzk.naver.com/open/v1/chats/send"
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json"
         }
 
-        extras_json = json.dumps({
-            "chatType": "TEXT",
-            "emojis": "",
-            "streamingChannelId": self.channel_id
-        })
-
         payload = {
             "chatChannelId": self.chat_channel_id,
-            "content": message,
-            "extras": extras_json
+            "message": message
         }
 
         response = await asyncio.get_event_loop().run_in_executor(
