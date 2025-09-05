@@ -21,7 +21,6 @@ TOKEN_CACHE_FILE = ".chzzk_token_cache.json"
 
 class ChzzkAPI:
     def __init__(self, channel_id, nid_aut, nid_ses):
-        load_dotenv()
         self.channel_id = channel_id
         self.nid_aut = nid_aut or os.getenv("NID_AUT")
         self.nid_ses = nid_ses or os.getenv("NID_SES")

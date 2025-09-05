@@ -7,6 +7,9 @@ from queue_manager import QueueManager
 from obs_manager import ObsManager
 import logging
 
+# Load environment variables from .env file at the very start
+load_dotenv()
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -67,7 +70,6 @@ async def on_chat_message(profile, message):
 
 async def main():
     global chzzk_api
-    load_dotenv()
 
     # 필수 환경 변수 확인
     required_vars = ["CHZZK_CHANNEL_ID"]
