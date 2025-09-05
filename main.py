@@ -27,8 +27,7 @@ async def on_chat_message(profile, message):
     if message == "!시참":
         if queue_manager.add_user(nickname):
             logging.info(f"'{nickname}'님이 시참 대기열에 추가되었습니다.")
-            # Optionally, send a confirmation message
-            # await chzzk_api.send_chat(f"{nickname}님, 대기열에 추가되었습니다!")
+            await chzzk_api.send_chat(f"'{nickname}'님 시참 대기열에 추가되었습니다!")
         else:
             logging.info(f"'{nickname}'님은 이미 대기열에 있습니다.")
 
