@@ -29,7 +29,7 @@ class ChzzkAPI:
         self.client_secret = os.getenv("CHZZK_CLIENT_SECRET")
         self.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
         self.access_token, self.refresh_token, self.token_expiry_time = None, None, None
-        self.chat_channel_id, self.websocket, self.on_auth_message_callback = None, None, None
+        self.chat_channel_id, self.websocket, self.on_message_callback = None, None, None
         self.session = requests.Session()
         self.is_listening = False
         self._load_tokens_from_cache()
@@ -153,7 +153,7 @@ class ChzzkAPI:
             return response.json().get("content", {}).get("chatChannelId")
         print("채팅 채널 ID를 가져오는데 실패했습니다."); return None
 
-    def set_on_auth_message_callback(self, callback): self.on_auth_message_callback = callback
+    def set_on_message_callback(self, callback): self.on_message_callback = callback
 
     async def listen_chat(self):
         self.is_listening = True
@@ -179,7 +179,7 @@ class ChzzkAPI:
                         elif message.get("cmd") == 93101:
                             for msg_item in message.get("bdy", []):
                                 profile = json.loads(msg_item.get("profile", "{}"))
-                                if self.on_auth_message_callback: await self.on_auth_message_callback(profile.get("nickname"), msg_item.get("msg"))
+                                if self.on_message_callback: await self.on_message_callback(profile, msg_item.get("msg"))
             except asyncio.TimeoutError:
                 print("웹소켓 PING 전송...");
                 try: await self.websocket.send(json.dumps({"ver": "2", "cmd": 0}))
