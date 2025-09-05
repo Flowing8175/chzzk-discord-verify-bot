@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from chzzk_api import ChzzkAPI
 from queue_manager import QueueManager
+from obs_manager import ObsManager
 import logging
 
 # 로깅 설정
@@ -12,6 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # 전역 인스턴스
 chzzk_api = None
 queue_manager = QueueManager()
+obs_manager = ObsManager()
 
 def is_authorized(profile):
     """스트리머 또는 관리자인지 확인"""
@@ -19,6 +21,13 @@ def is_authorized(profile):
     badge = profile.get("badge", {}).get("imageUrl")
     is_streamer = badge and "streamer" in badge
     return "channel_manager" in auths or "streamer" in auths or is_streamer
+
+def update_obs_subtitle():
+    """OBS 자막 소스의 텍스트를 업데이트합니다."""
+    if obs_manager.ws:
+        queue = queue_manager.get_queue()
+        formatted_text = obs_manager.format_queue_text(queue)
+        obs_manager.update_text_source(formatted_text)
 
 async def on_chat_message(profile, message):
     """채팅 메시지 처리"""
@@ -28,6 +37,7 @@ async def on_chat_message(profile, message):
         if queue_manager.add_user(nickname):
             logging.info(f"'{nickname}'님이 시참 대기열에 추가되었습니다.")
             await chzzk_api.send_chat(f"'{nickname}'님 시참 대기열에 추가되었습니다!")
+            update_obs_subtitle()
         else:
             logging.info(f"'{nickname}'님은 이미 대기열에 있습니다.")
 
@@ -44,6 +54,7 @@ async def on_chat_message(profile, message):
         if queue_manager.is_empty():
             await chzzk_api.send_chat("시참 인원 없다 하@꼬쉑ㅋ")
             logging.info("대기열이 비어있어 !pop 명령을 처리할 수 없습니다.")
+            update_obs_subtitle() # Clear the subtitle if the queue is now empty
             return
 
         popped_users = queue_manager.pop_users(count)
@@ -52,6 +63,7 @@ async def on_chat_message(profile, message):
             announcement = ", ".join(popped_users) + "님 참여 순서입니다!"
             await chzzk_api.send_chat(announcement)
             logging.info(f"{count}명을 뽑았습니다: {', '.join(popped_users)}")
+            update_obs_subtitle()
 
 async def main():
     global chzzk_api
@@ -77,6 +89,10 @@ async def main():
         )
         await chzzk_api.initialize()
 
+        # OBS WebSocket 연결
+        obs_manager.connect()
+        update_obs_subtitle() # Clear subtitle on start
+
         # 콜백 함수 설정
         chzzk_api.set_on_message_callback(on_chat_message)
 
@@ -90,6 +106,8 @@ async def main():
         logging.info("프로그램을 종료합니다.")
         if chzzk_api:
             await chzzk_api.close()
+        if obs_manager:
+            obs_manager.disconnect()
 
 if __name__ == "__main__":
     try:
